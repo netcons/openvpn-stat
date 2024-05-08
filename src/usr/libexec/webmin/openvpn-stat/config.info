@@ -1,0 +1,7 @@
+openvpn_statd_bin=OpenVPN Stat daemon binary,8
+start_cmd=Command to start openvpn-statd,3,Just run server
+stop_cmd=Command to stop openvpn-statd,3,Just kill process
+restart_cmd=Command to apply openvpn-statd configuration,3,Just send HUP signal
+pid_file=Full path to openvpn-statd PID file,3,None
+log_dir=OpenVPN Stat Log Directory,8
+live_log_dir=OpenVPN Log Directory,8

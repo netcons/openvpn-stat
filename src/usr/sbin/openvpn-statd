@@ -1,0 +1,259 @@
+#!/bin/bash
+#
+# Descitption : Openvpn tunnel session monitor and logging daemon
+#
+# Author : J. Cameron 01/01/2011 john@ncc.co.za
+#
+
+VERSION="3.0"
+PROG="/usr/sbin/openvpn-statd"
+PIDFILE="/run/openvpn-statd/openvpn-statd.pid"
+
+live_log_dir="/run/openvpn-server"
+
+Log_Dir="/var/log/openvpn-stat"
+if [ ! -d $Log_Dir ]
+then
+ mkdir -m 755 $Log_Dir
+ chgrp openvpn $Log_Dir
+fi 
+
+Current_Time () {
+ End_Time=`date +"%F_%T"`
+}
+
+Current_Month () {
+ Month=`date +"%b" | tr [:upper:] [:lower:]`
+}
+
+Current_Year () {
+ Year=`date +"%Y"`
+}
+
+Get_Tunnel_Logs () {
+cd $live_log_dir
+ls status-*.log > /dev/null 2>&1
+if [ $? != 0 ]
+ then
+  echo "Error : No logs found in $live_log_dir"
+  exit 1
+ else
+  Tunnel_Log_List=`ls status-*.log`
+fi
+}
+
+Help () {
+ echo " "
+ echo "Description : Openvpn tunnel session monitor and logging daemon"
+ echo " "
+ echo "Usage :  openvpn-statd [OPTION]"
+ echo " "
+ echo "  -a, --archive"
+ echo "     compress all logs except current"
+ echo " "
+ echo "  -d, --daemon"
+ echo "     start logging sessions in background"
+ echo " "
+ echo "  -h, --help"
+ echo "     display help"
+ echo " "
+ echo "  -m, --monitor"
+ echo "     start monitoring sessions in forground"
+ echo " "
+ echo "  -v, --version"
+ echo "     display version"
+ echo " "
+ exit 0
+}
+
+Archive () {
+ Current_Year
+ Current_Month
+ cd $Log_Dir
+ Current_Log_List=`ls *-${Month}-${Year}-session.log`
+ Log_List=`ls *-session.log`
+ for Current_Log in $Current_Log_List
+  do
+   Log_List=`echo $Log_List | sed "s/$Current_Log//g"`
+  done
+ for Log in $Log_List
+ do
+  gzip $Log
+ done
+}
+
+Daemon () {
+PID=`pidof -x $PROG`
+echo "$PID" > $PIDFILE
+LOGGER="logger -t openvpn-statd[${PID}] -p daemon.notice"
+$LOGGER "Started" 
+while true
+ do
+  Current_Year
+  Current_Month
+  for Tunnel_Log in $Tunnel_Log_List
+   do
+    z=${Tunnel_Log#"status-"}
+    Tunnel=${z%".log"}
+
+    # Add New Sessions or Update Open Sessions
+    Pending_Log=${Tunnel}-pending-session.log
+    Live_Session_List=`grep "^CLIENT_LIST," $Tunnel_Log | grep -v "^CLIENT_LIST,UNDEF" | sed "s/ /_/g"`
+    if [ ! -e $Log_Dir/$Pending_Log ]
+     then
+      touch $Log_Dir/$Pending_Log
+     fi
+    for Live_Session in $Live_Session_List
+     do
+      Certificate=`echo $Live_Session | cut -d , -f2`
+      Start_Time=`echo $Live_Session | cut -d , -f8`
+      End_Time="PENDING"
+      Receive=`echo $Live_Session | cut -d , -f5`  
+      Transmit=`echo $Live_Session | cut -d , -f6`
+      Usage=$(($Receive+$Transmit))
+      Certificate_IP=`echo $Live_Session | cut -d , -f4`
+      Closed_Count=0
+      Current_Stats="${Certificate},${Start_Time},${End_Time},${Usage},${Certificate_IP},${Closed_Count}"
+      grep "${Certificate},${Start_Time}" $Log_Dir/$Pending_Log > /dev/null 2>&1
+       if [ $? = 1 ]
+        then
+         echo "$Current_Stats" >> $Log_Dir/$Pending_Log
+        else
+         sed -i "s/^${Certificate},${Start_Time}.*$/$Current_Stats/" $Log_Dir/$Pending_Log
+       fi		        
+    done	 
+
+    # Update Closed Sessions
+    Closed_Log=${Tunnel}-${Month}-${Year}-session.log
+    if [ ! -e $Log_Dir/$Closed_Log ]
+     then
+      touch $Log_Dir/$Closed_Log
+     fi
+    Logged_Session_List=`cat $Log_Dir/$Pending_Log`
+    for Logged_Session in $Logged_Session_List
+     do
+      Certificate=`echo $Logged_Session | cut -d , -f1`
+      Start_Time=`echo $Logged_Session | cut -d , -f2`
+      End_Time=`echo $Logged_Session | cut -d , -f3`
+      if [ "$End_Time" = "PENDING" ] 
+       then
+        Live_Start_Time=`echo $Start_Time | sed "s/_/ /g"`
+        grep "^CLIENT_LIST,${Certificate}" $Tunnel_Log | grep "$Live_Start_Time" > /dev/null 2>&1
+        if [ $? = 1 ]
+         then
+          Current_Time
+          sed -i "/^${Certificate},${Start_Time}.*$/s/PENDING/$End_Time/" $Log_Dir/$Pending_Log
+        fi
+      else
+       Old_Closed_Count=`echo $Logged_Session | cut -d , -f6`
+       Closed_Count=$(($Old_Closed_Count+1))
+       if [ $Closed_Count -ge 6 ]
+        then
+         sed -i "/^${Certificate},${Start_Time}.*$/d" $Log_Dir/$Pending_Log
+         echo $Logged_Session >> $Log_Dir/$Closed_Log   
+       else
+        Usage=`echo $Logged_Session | cut -d , -f4`
+        Certificate_IP=`echo $Logged_Session | cut -d , -f5`
+        Current_Stats="${Certificate},${Start_Time},${End_Time},${Usage},${Certificate_IP},${Closed_Count}"
+        sed -i "s/^${Certificate},${Start_Time}.*$/$Current_Stats/" $Log_Dir/$Pending_Log
+       fi
+      fi
+    done			
+   done  
+   sleep 30
+  done
+}
+
+Monitor () {
+while [ -z $Key_Stroke ]
+ do
+  Grand_Total=0
+  Session_Total=0
+  Space_Limit=16
+  clear
+  echo -e "\033[1m================================================================================"
+  printf "%-26s %-26s %+26s\n" "`date +"%m-%d-%Y %H:%M"`" "OPENVPN USAGE MONITOR" "`hostname`"
+  echo "================================================================================"
+  printf "\033[0m%-24s %-15s %-6s %-10s %+6s %+14s\n" " CERTIFICATE" "IP" "TUNNEL" "DATE" "TIME" "USAGE"
+  for Tunnel_Log in $Tunnel_Log_List
+   do
+    z=${Tunnel_Log#"status-"}
+    Tunnel=${z%".log"}
+    Tunnel_Total=0
+
+    if [ -e /etc/openvpn/server/${Tunnel}.conf ]
+     then
+      Tunnel_Conf="/etc/openvpn/server/${Tunnel}.conf"
+      Tun_Dev=`grep ^dev $Tunnel_Conf | cut -d " " -f2`
+      if [ $Tun_Dev = "tun" ]
+       then
+        Tun_Dev="tun0"
+      fi
+      if [ $Tun_Dev = "tap" ]
+       then
+        Tun_Dev="tap0"
+      fi
+     else
+        Tun_Dev="----"
+    fi
+
+    Live_Session_List=`grep "^CLIENT_LIST," $Tunnel_Log | sed "s/ /_/g" | sort -t, -n -k +8 -r`
+    Tunnel_Session_Total=`echo $Live_Session_List | wc -w`
+    for Session in $Live_Session_List
+     do
+      Receive=`echo $Session | cut -d , -f5`  
+      Transmit=`echo $Session | cut -d , -f6`
+      Usage=$(($Receive+$Transmit))
+      Tunnel_Total=$(($Tunnel_Total+$Usage))
+    done
+    Viewable_Session_List=`echo $Live_Session_List | cut -d " " -f1-17`
+    for Session in $Viewable_Session_List
+     do
+      Certificate=`echo $Session | cut -d , -f2`
+      Certificate_IP=`echo $Session | cut -d , -f4`
+      Receive=`echo $Session | cut -d , -f5`  
+      Transmit=`echo $Session | cut -d , -f6`
+      Usage=$(($Receive+$Transmit))
+      Usage_MB=`echo "scale=1;  $Usage/1000000" | bc`
+      Date=`echo $Session | cut -d , -f8 | cut -d _ -f1`
+      DateY=`echo $Date | cut -d - -f1`
+      DateM=`echo $Date | cut -d - -f2`
+      DateD=`echo $Date | cut -d - -f3`
+      Date=`echo ${DateD}-${DateM}-${DateY}`
+      Time=`echo $Session | cut -d , -f8 | cut -d _ -f2 | cut -d : -f1,2`
+      Space_Limit=$(($Space_Limit-1))
+      printf "\033[0m\033[0;36m%-24s %-15s %-6s %-10s %+6s %+14s\n" " $Certificate" "$Certificate_IP" "$Tun_Dev" "$Date" "$Time" "$Usage_MB MB"
+    done	 
+    Grand_Total=$(($Grand_Total+$Tunnel_Total))
+    Grand_Total_MB=`echo "scale=1;  $Grand_Total/1000000" | bc`
+    Session_Total=$(($Session_Total+$Tunnel_Session_Total))
+   done  
+   Space_Count=0
+   while [ $Space_Count -le $Space_Limit ]
+    do
+     echo ""
+     Space_Count=$(($Space_Count+1))
+   done
+   echo -e "\033[0m\033[1m================================================================================"
+   printf "%-39s %+39s\n" " SESSIONS : $Session_Total" "TOTAL : $Grand_Total_MB MB"
+   echo -e "================================================================================\033[0m\c"
+   read -n 1 -t 15 -s Key_Stroke
+ done
+}
+
+case $1 in
+ -a|--archive) Archive;;
+ -d|--daemon) Get_Tunnel_Logs
+              if [ ! -e $PIDFILE ]
+               then
+                Daemon&
+               else
+                echo "openvpn-statd (pid  `cat $PIDFILE`) already running..."
+                exit 1
+               fi;; 
+ -h|--help) Help;;	 
+ -m|--monitor) Get_Tunnel_Logs
+               Monitor;;
+ -v|--version) echo "openvpn-statd $VERSION";;
+ *) Help;;	 
+esac

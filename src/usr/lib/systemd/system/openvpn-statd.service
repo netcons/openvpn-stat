@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenVPN Stats Daemon
+After=syslog.target
+Requires=network.target
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/openvpn-statd --daemon
+ExecStopPost=/bin/rm -f /run/openvpn-statd/openvpn-statd.pid
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

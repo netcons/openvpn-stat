@@ -1,0 +1,257 @@
+#!/bin/bash
+# Descitption : Openvpn-Stat daemon log reporter
+#
+# Author : J. Cameron 01/01/2011 john@ncc.co.za
+# 
+
+VERSION="3.0"
+
+Ovpn_Conf_Dir="/etc/openvpn/server"
+
+Log_Dir="/var/log/openvpn-stat"
+if [ ! -d $Log_Dir ]
+then
+ mkdir $Log_Dir
+fi
+
+Get_Date () {
+ Date=`date +"%m-%d-%Y %H:%M"`
+}
+
+Current_Month () {
+ Month=`date +"%b" | tr [:upper:] [:lower:]`
+ Month_Uc=`echo $Month | tr [:lower:] [:upper:]`
+}
+
+Current_Year () {
+ Year=`date +"%Y"`
+}
+
+Check_Month () {
+ case $Arg2 in 
+  jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec) Month=$Arg2
+               Month_Uc=`echo $Month | tr [:lower:] [:upper:]`;;
+  * ) Current_Month;;
+ esac
+}
+
+Check_Year () {
+ if [ ! -z $Arg3 ]
+  then
+   Year=$Arg3
+  else
+   Current_Year
+ fi
+}
+
+Help () {
+ echo " "
+ echo "Description : Openvpn-Stat daemon log reporter"
+ echo " "
+ echo "Usage :  openvpn-stat [OPTION] argument..."
+ echo " "
+ echo "  -d, --detail [mon] [yyyy]"
+ echo "     display closed session detail for current month"
+ echo "     or for specific month eg. -c jan 2014"
+ echo " "
+ echo "  -h, --help"
+ echo "     display help"
+ echo " "
+ echo "  -p, --pending"
+ echo "     display pending sessions"
+ echo " "
+ echo "  -s, --summary [mon] [yyyy]"
+ echo "     display closed session summary for current month"
+ echo "     or for specific month eg. -s jan 2014"
+ echo " "
+ echo "  -v, --version"
+ echo "     display version"
+ echo " "
+ exit 0
+}
+
+Month_Summary () {
+cd $Log_Dir
+ls *-${Month}-${Year}-session.log > /dev/null 2>&1
+if [ $? != 0 ]
+ then
+  echo "No Logs have been created for $Month $Year !"
+  exit 1
+ else
+  Grand_Usage_Total=0
+  Get_Date
+  echo "================================================================================"
+  printf "%-26s %-26s %+26s\n" "$Date" "OPENVPN USAGE REPORT" "`hostname`"
+  echo "================================================================================"
+  Log_List=`ls *-${Month}-${Year}-session.log`
+  for Log in $Log_List
+   do
+    Tunnel=${Log%%-${Month}-${Year}-session.log}
+    Tun_Dev="----"
+    Tun_Port="----"
+    Tun_IP="----"
+    Tunnel_Conf="${Ovpn_Conf_Dir}/${Tunnel}.conf"
+    if [ -e $Tunnel_Conf ]
+     then
+      Tun_Dev=`grep ^dev $Tunnel_Conf | cut -d " " -f2`
+      if [ $Tun_Dev = "tun" ]
+       then
+        Tun_Dev="tun0"
+      fi
+      if [ $Tun_Dev = "tap" ]
+       then
+        Tun_Dev="tap0"
+      fi
+      Tun_Port=`grep ^port $Tunnel_Conf | cut -d " " -f2`
+      Tun_IP=`ip addr show dev $Tun_Dev | grep -w inet | cut -d " " -f6`
+    fi
+    echo " $Tun_Dev : $Tunnel : $Tun_IP : $Tun_Port"
+  echo ""
+    printf "%-23s %-15s %+10s %+6s %+6s %+14s\n" " CERTIFICATE" "IP" "SESSIONS" " " " " "USAGE"
+    Tunnel_Total=0
+    Tunnel_Total_MB=0
+    Tunnel_Session_Count=0
+    > /tmp/.openvpn-stat.tmp
+    Certificate_List=`cat $Log | cut -d , -f1 | sort -u`
+    for Certificate in $Certificate_List
+     do
+      Stats_List=`grep -w "$Certificate" $Log`
+      Usage_Total=0
+      Certificate_Session_Count=0
+      for Stats in $Stats_List
+       do
+        Certificate_IP=`echo $Stats | cut -d , -f5`
+        Usage=`echo $Stats | cut -d , -f4`
+        Usage_Total=$(($Usage_Total+$Usage))
+        Tunnel_Session_Count=$(($Tunnel_Session_Count+1))
+        Certificate_Session_Count=$(($Certificate_Session_Count+1))
+       done
+      echo "${Certificate},${Certificate_IP},${Certificate_Session_Count},${Usage_Total}" >> /tmp/.openvpn-stat.tmp
+      Tunnel_Total=$(($Tunnel_Total+$Usage_Total))
+      Tunnel_Total_MB=`echo "scale=1;  $Tunnel_Total/1000000" | bc`
+     done
+    Stats_Summary_List=`sort -t, -n -k +4 -r /tmp/.openvpn-stat.tmp`
+    rm /tmp/.openvpn-stat.tmp
+    for Stats in $Stats_Summary_List
+     do
+      Certificate=`echo $Stats | cut -d , -f1`
+      Certificate_IP=`echo $Stats | cut -d , -f2`
+      Certificate_Session_Count=`echo $Stats | cut -d , -f3`
+      Usage_Total=`echo $Stats | cut -d , -f4`
+      Usage_Total_MB=`echo "scale=1;  $Usage_Total/1000000" | bc`
+      printf "%-23s %-15s %+10s %+6s %+6s %+14s\n" "  $Certificate" " $Certificate_IP" "$Certificate_Session_Count" " " " " "$Usage_Total_MB MB"
+     done
+    echo ""
+    printf "%-23s %-15s %+10s %+6s %+6s %+14s\n" " " " " "$Tunnel_Session_Count" " " " " "$Tunnel_Total_MB MB"
+    echo "================================================================================"
+    Grand_Usage_Total=$(($Grand_Usage_Total+$Tunnel_Total))
+    Grand_Usage_Total_MB=`echo "scale=1;  $Grand_Usage_Total/1000000" | bc`
+   done
+   printf "%-39s %+39s\n" " $Month_Uc $Year" "TOTAL : $Grand_Usage_Total_MB MB"
+   echo "================================================================================"
+fi
+}
+
+Month_Detail () {
+cd $Log_Dir
+ls *-${Month}-${Year}-session.log > /dev/null 2>&1
+if [ $? != 0 ]
+ then
+  echo "No Logs have been created for $Month $Year !"
+  exit 1
+ else
+  Grand_Usage_Total=0
+  Get_Date
+  echo "================================================================================"
+  printf "%-26s %-26s %+26s\n" "$Date" "OPENVPN USAGE REPORT" "`hostname`"
+  echo "================================================================================"
+  Log_List=`ls *-${Month}-${Year}-session.log`
+  for Log in $Log_List
+   do
+    Tunnel=${Log%%-${Month}-${Year}-session.log}
+    Pending_Log=${Tunnel}-pending-session.log
+    Tun_Dev="----"
+    Tun_Port="----"
+    Tun_IP="----"
+    Tunnel_Conf="${Ovpn_Conf_Dir}/${Tunnel}.conf"
+    if [ -e $Tunnel_Conf ]
+     then
+      Tun_Dev=`grep ^dev $Tunnel_Conf | cut -d " " -f2`
+      if [ $Tun_Dev = "tun" ]
+       then
+        Tun_Dev="tun0"
+      fi
+      if [ $Tun_Dev = "tap" ]
+       then
+        Tun_Dev="tap0"
+      fi
+     Tun_Port=`grep ^port $Tunnel_Conf | cut -d " " -f2`
+     Tun_IP=`ip addr show dev $Tun_Dev | grep -w inet | cut -d " " -f6`
+    fi
+    echo " $Tun_Dev : $Tunnel : $Tun_IP : $Tun_Port"
+    echo ""
+    printf "%-23s %-15s %-12s %-12s %+14s\n" " CERTIFICATE" "IP" "START" "END" "USAGE"
+    Tunnel_Total=0
+    Tunnel_Total_MB=0
+    Tunnel_Session_Count=0
+    if [ $Stats_List_Mode = "CLOSED" ]
+     then
+      Stats_List=`sort -t, -n -k +4 -r $Log`
+    fi
+    if [ $Stats_List_Mode = "PENDING" ]
+     then
+      Stats_List=`sort -t, -n -k +4 -r $Pending_Log | grep PENDING`
+    fi
+    for Stats in $Stats_List
+     do
+      Certificate=`echo $Stats | cut -d , -f1`
+      Certificate_IP=`echo $Stats | cut -d , -f5`
+      Start_Date=`echo $Stats | cut -d , -f2 | cut -d _ -f1 | cut -d - -f2,3`
+      Start_Time=`echo $Stats | cut -d , -f2 | cut -d _ -f2 | cut -d : -f1,2`
+      Start=`echo $Start_Date $Start_Time`
+      if [ $Stats_List_Mode = "PENDING" ]
+       then
+        End="PENDING"
+       else
+        End_Date=`echo $Stats | cut -d , -f3 | cut -d _ -f1 | cut -d - -f2,3`
+        End_Time=`echo $Stats | cut -d , -f3 | cut -d _ -f2 | cut -d : -f1,2`
+        End=`echo $End_Date $End_Time`
+      fi
+      Usage=`echo $Stats | cut -d , -f4`
+      Usage_MB=`echo "scale=1;  $Usage/1000000" | bc`
+      Tunnel_Total=$(($Tunnel_Total+$Usage))
+      Tunnel_Total_MB=`echo "scale=1;  $Tunnel_Total/1000000" | bc`
+      Tunnel_Session_Count=$(($Tunnel_Session_Count+1))
+      printf "%-23s %-15s %+12s %+12s %+14s\n" "  $Certificate" " $Certificate_IP" "$Start" "$End" "$Usage_MB MB"
+     done
+    echo ""
+    printf "%-23s %-15s %+12s %+12s %+14s\n" " SESSIONS : $Tunnel_Session_Count" " " " " " " "$Tunnel_Total_MB MB"
+    echo "================================================================================"
+    Grand_Usage_Total=$(($Grand_Usage_Total+$Tunnel_Total))
+    Grand_Usage_Total_MB=`echo "scale=1;  $Grand_Usage_Total/1000000" | bc`
+   done
+   printf "%-39s %+39s\n" " $Month_Uc $Year" "TOTAL : $Grand_Usage_Total_MB MB"
+   echo "================================================================================"
+fi
+}
+
+Arg1=$1
+Arg2=$2
+Arg3=$3
+
+case $Arg1 in
+ -d|--detail) Check_Month
+              Check_Year
+              Stats_List_Mode="CLOSED"
+              Month_Detail;;
+ -h|--help) Help;;
+ -p|--pending) Check_Month
+               Check_Year
+               Stats_List_Mode="PENDING"
+               Month_Detail;;
+ -s|--summary) Check_Month
+               Check_Year
+               Month_Summary;;
+ -v|--version) echo "openvpn-stat $VERSION";;
+ *) Help;;
+esac

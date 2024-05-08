@@ -1,0 +1,7 @@
+os_support=*-linux
+version=1.960
+longdesc=OpenVPN network traffic usage reporter.
+name=openvpn-stat
+desc=OpenVPN Statistics
+category=net
+depends=1.960

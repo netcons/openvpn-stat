@@ -1,0 +1,7 @@
+openvpn_statd_bin=/usr/sbin/openvpn-statd
+start_cmd=systemctl start openvpn-statd
+stop_cmd=systemctl stop openvpn-statd
+restart_cmd=systemctl restart openvpn-statd
+pid_file=/run/openvpn-statd/openvpn-statd.pid
+log_dir=/var/log/openvpn-stat
+live_log_dir=/run/openvpn-server

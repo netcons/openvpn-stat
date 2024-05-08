@@ -1,0 +1,34 @@
+
+  Openvpn Statistics
+
+  2013/07/09 12:07:00
+
+  You may distribute under the terms of either
+  the GNU General Public License (GPL)
+
+
+CHANGELOG
+---------
+
+09-07-2013 v.1.9-2
+           - Initial release with support for Openvpn 2.1.1 on CentOS 5.
+
+23-06-2017 v.1.9-3
+           - Support for Openvpn 2.4.7 on CentOS 6.
+
+31-07-2019 v.2.4-1
+           - Support for Openvpn 2.4.7 on CentOS 7.
+
+31-07-2019 v.2.5-1
+           - Support for Openvpn 2.4.11 on CentOS 8.
+
+20-12-2021 v.2.5-2
+           - Support for Openvpn 2.5.7 on CentOS 9.
+           - Support for new Openvpn log location, /run/openvpn-server.
+
+20-12-2023 v.3.0-1
+           - Support for Openvpn 2.5.8.
+           - Migrate GUI from Apache to Webmin.
+
+24-05-2024 v.3.0-7
+           - Fix some formating in report.cgi
