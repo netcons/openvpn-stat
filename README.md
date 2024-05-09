@@ -1,4 +1,4 @@
-## Openvpn Statistics
+## OpenVPN Statistics
 
 Openvpn traffic logger, monitor and reporting tool.
 
