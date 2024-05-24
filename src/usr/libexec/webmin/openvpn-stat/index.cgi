@@ -2,7 +2,7 @@
 
 do 'openvpn-stat-lib.pl';
 
-&ui_print_header(undef , $text{'title'}, "", undef, 1, 1, 0,
+&ui_print_header( "<img src=images/openvpn.png hspace=4>$text{'title_index'}" , $text{'title'}, "", undef, 1, 1, 0,
         &help_search_link("openvpn", "man", "doc"));
 
 my @links = ('monitor.cgi',

@@ -6,7 +6,7 @@ use Tie::File;
 use POSIX qw(strftime);
 
 print "Refresh: 15\r\n";
-&ui_print_header( $text{'title_monitor'}, $text{'title'}, "" );
+&ui_print_header( "<img src=images/openvpn.png hspace=4>$text{'title_monitor'}", $text{'title'}, "" );
 
 my @logs = glob("$config{'live_log_dir'}/*.log");
 if (@logs) {
@@ -103,7 +103,7 @@ sub showsessions {
   	my $sessiontotal = 0;
 	my $sessioncount = @sessions;
 
-	@tds = ( "" ,"" ,"" ,"" ,"" ,"" ,"width=1% align=right style='white-space: nowrap;'" );
+	@tds = ( "" ,"" ,"" ,"" ,"" ,"" ,"width=1% style=text-align:right;white-space:nowrap" );
 
         print &ui_columns_start([
                           "<b>$text{'head_cname'}</b>",

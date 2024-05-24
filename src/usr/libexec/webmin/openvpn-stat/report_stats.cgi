@@ -5,7 +5,7 @@ do 'openvpn-stat-lib.pl';
 use Tie::File;
 use File::Basename;
 
-&ui_print_header( $text{'title_report'}, $text{'title'}, "" );
+&ui_print_header( "<img src=images/openvpn.png hspace=4>$text{'title_report'}", $text{'title'}, "" );
 
 my $type = $in{'type'};
 my $month = $in{'month'};
@@ -136,7 +136,7 @@ sub showsummary {
 
 	my @summarysessions = sort { $b->[3] <=> $a->[3] } @summarysessions;
 
-	@tds = ( "" ,"" ,"" ,"width=1% align=right style='white-space: nowrap;'" );
+	@tds = ( "" ,"" ,"" ,"width=1% style=text-align:right;white-space:nowrap" );
 
         print &ui_columns_start([
                           "<b>$text{'head_cname'}</b>",
@@ -169,7 +169,7 @@ sub showdetail {
 
 	my @sessions = sort { $b->[3] <=> $a->[3] } @sessions;
 
-	@tds = ( "" ,"" ,"" ,"" ,"", "", "width=1% align=right style='white-space: nowrap;'" );
+	@tds = ( "" ,"" ,"" ,"" ,"", "", "width=1% style=text-align:right;white-space:nowrap" );
 
         print &ui_columns_start([
                           "<b>$text{'head_cname'}</b>",
